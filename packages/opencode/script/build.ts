@@ -18,6 +18,7 @@ import { Script } from "@opencode-ai/script"
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const buildTarget = Bun.env.OPENCODE_TARGET
 
 const allTargets: {
   os: string
@@ -82,8 +83,22 @@ const allTargets: {
   },
 ]
 
+function name(item: (typeof allTargets)[number]) {
+  return [
+    pkg.name,
+    item.os === "win32" ? "windows" : item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+}
+
 const targets = singleFlag
   ? allTargets.filter((item) => {
+      if (buildTarget) return name(item) === `${pkg.name}-${buildTarget}`
+
       if (item.os !== process.platform || item.arch !== process.arch) {
         return false
       }
@@ -106,18 +121,9 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
 for (const item of targets) {
-  const name = [
-    pkg.name,
-    // changing to win32 flags npm for some reason
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
-  console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  const out = name(item)
+  console.log(`building ${out}`)
+  await $`mkdir -p dist/${out}/bin`
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
@@ -137,8 +143,8 @@ for (const item of targets) {
       //@ts-ignore (bun types aren't up to date)
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
+      target: out.replace(pkg.name, "bun") as any,
+      outfile: `dist/${out}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -152,11 +158,11 @@ for (const item of targets) {
     },
   })
 
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
+  await $`rm -rf ./dist/${out}/bin/tui`
+  await Bun.file(`dist/${out}/package.json`).write(
     JSON.stringify(
       {
-        name,
+        name: out,
         version: Script.version,
         os: [item.os],
         cpu: [item.arch],
@@ -165,7 +171,7 @@ for (const item of targets) {
       2,
     ),
   )
-  binaries[name] = Script.version
+  binaries[out] = Script.version
 }
 
 export { binaries }

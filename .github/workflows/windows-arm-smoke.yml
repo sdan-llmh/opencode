@@ -22,6 +22,8 @@ jobs:
       - name: build cli
         working-directory: packages/opencode
         run: bun run script/build.ts --single
+        env:
+          OPENCODE_TARGET: windows-arm64
 
       - name: copy sidecar
         shell: bash
