@@ -1,0 +1,35 @@
+name: windows-arm-smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/windows-arm-smoke
+
+jobs:
+  build:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+
+      - name: build cli
+        working-directory: packages/opencode
+        run: bun run script/build.ts --single
+
+      - name: copy sidecar
+        shell: bash
+        run: |
+          mkdir -p packages/desktop/src-tauri/sidecars
+          cp packages/opencode/dist/opencode-windows-arm64/bin/opencode.exe \
+            packages/desktop/src-tauri/sidecars/opencode-cli-aarch64-pc-windows-msvc.exe
+
+      - name: build desktop
+        working-directory: packages/desktop
+        run: bunx tauri build --target aarch64-pc-windows-msvc --config ./src-tauri/tauri.conf.json
